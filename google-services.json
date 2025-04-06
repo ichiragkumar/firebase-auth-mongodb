@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "563681284187",
+    "project_id": "waw-backend-stage",
+    "storage_bucket": "waw-backend-stage.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:563681284187:android:e0885c72206fad7bdfaf7e",
+        "android_client_info": {
+          "package_name": "com.wawinners.scanner"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzMwXjFhl1UWlJ1LP9LYj5H4y7Ll7VcyY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
