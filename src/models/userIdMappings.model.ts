@@ -1,15 +1,15 @@
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model, Types } from 'mongoose';
 
-export interface UserIdMapping extends Document {
-  firebaseUid: string;
-  mongoDbId: string;
-  identifier: string; 
-}
+interface UserIdMapping {
+    firebaseUid: string;
+    mongoObjectId: Types.ObjectId;
+  }
+  
 
 const mappingSchema = new Schema<UserIdMapping>({
   firebaseUid: { type: String, required: true, unique: true },
-  mongoDbId: { type: String, required: true },
-  identifier: { type: String },
+  mongoObjectId: { type: Schema.Types.ObjectId, required: true, unique: true },
+
 });
 
 export const UserIdMappingModel = model<UserIdMapping>('UserIdMapping', mappingSchema);
