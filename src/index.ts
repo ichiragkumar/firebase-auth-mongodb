@@ -2,6 +2,8 @@ import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import userRoutes from './routes/user.routes';
+import firebaseAllUsersRouter from './routes/allusers';
+import initializeFirebaseApp from './firebase-admin-init';
 
 dotenv.config();
 
@@ -19,6 +21,7 @@ mongoose
 
 
     app.use('/user', userRoutes);
+    app.use("/appusers",firebaseAllUsersRouter)
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
