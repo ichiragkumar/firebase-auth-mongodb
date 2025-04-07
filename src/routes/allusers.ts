@@ -1,109 +1,90 @@
-
 import { Router } from 'express';
 import * as admin from 'firebase-admin';
-
-
 import { Helper } from '../Helper/helper';
-import { Types } from 'mongoose';
-import { UserModel } from '../models/user.model';
 import { MongoClient, ObjectId } from 'mongodb';
-
-
 
 const firebaseAllUsersRouter = Router();
 
-
-firebaseAllUsersRouter.get("/getAllUsers", async (req, res) =>{
-
+firebaseAllUsersRouter.get("/getAllUsers", async (req, res): Promise<any> => {
+  try {
     const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+    const MAIN_DB_URL = process.env.MAIN_DB_URL;
 
-    if (!serviceAccountBase64) {
-    throw new Error('Missing FIREBASE_SERVICE_ACCOUNT_BASE64 in environment variables');
+    if (!serviceAccountBase64 || !MAIN_DB_URL) {
+      throw new Error('Missing environment variables');
     }
 
     const serviceAccountJson = Buffer.from(serviceAccountBase64, 'base64').toString('utf8');
 
-    admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(serviceAccountJson)),
-    });
-
-
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(JSON.parse(serviceAccountJson)),
+      });
+    }
 
 
     const allUsers = [];
     let nextPageToken: string | undefined = undefined;
 
     do {
-    const result = await admin.auth().listUsers(1000, nextPageToken);
-    allUsers.push(...result.users);
-    nextPageToken = result.pageToken;
+      const result = await admin.auth().listUsers(1000, nextPageToken);
+      allUsers.push(...result.users);
+      nextPageToken = result.pageToken;
     } while (nextPageToken);
 
+    const allUserUIDs = allUsers.map(user => user.uid);
 
-    const allUsersIDs : string[] = allUsers.map((user: any) => {
-            return user.uid;
-    });
+    const transformedObjectIds: ObjectId[] = [];
+    const validTransformMap: { _id: ObjectId; firebaseUid: string }[] = [];
 
+    for (const uid of allUserUIDs) {
+      if (ObjectId.isValid(uid)) {
+        continue;
+      }
 
+      const transformed = Helper.generateUid(uid);
 
-    const existingUsers : string[] = [];
-    const newUsers : string[] = [];
-
-    const transformed:any[] = allUsersIDs.map((id: string) => {
-
-        // check weather this user is 
-        // already transformed and made it to valid mongo object id
-        const checkIsIdValidAsObjectId = Types.ObjectId.isValid(id);
-        if (checkIsIdValidAsObjectId) {
-            console.log(`🔍 Using direct ObjectId: ${id}`);
-            newUsers.push(id);
-        }
-
-        const transformedId =Helper.generateUid(id);
-        if (Types.ObjectId.isValid(transformedId)) {
-                console.log(`🛠️ Transformed Firebase UID to ObjectId: ${transformedId}`);
-        }
-        existingUsers.push(transformedId);
-
-
-    
-        
-    
-
-
-    });
-
-
-    // now let's verifying the existing users to our migrated DB
-    const mongoUri = process.env.MAIN_DB_URL;
-    if (!mongoUri) {
-    throw new Error('Missing MONGO_URI in environment variables');
+      if (ObjectId.isValid(transformed)) {
+        const objectId = new ObjectId(transformed);
+        transformedObjectIds.push(objectId);
+        validTransformMap.push({
+          _id: objectId,
+          firebaseUid: uid
+        });
+      }
     }
-    const client = new MongoClient(mongoUri);
+
+    const client = new MongoClient(MAIN_DB_URL);
     await client.connect();
 
-    console.log("connected to Migrated DB")
-    const users= client.db('main').collection('users').find({}).toArray;
-    if(!users){
-        console.log("No users found in Migrated DB")
+    const db = client.db('main');
+    const usersCollection = db.collection('users');
+    const mappingCollection = db.collection('mapuserauths');
+
+
+    const usersFound = await usersCollection.find({
+      _id: { $in: transformedObjectIds }
+    }).toArray();
+
+
+    for (const existingUsersInDB of validTransformMap) {
+      const exists = await mappingCollection.findOne({ _id: existingUsersInDB._id });
+      if (!exists) {
+        await mappingCollection.insertOne(existingUsersInDB);
+      }
     }
 
+    await client.close();
 
-    // const users =  client.db('main').collection('users').find(existingUsers.map(id => ({ _id: new ObjectId(id) }))).toArray;
-
-    
-
-   res.status(200).json({
-    transformedid:transformed,
-    transformedLengthis:transformed.length,
-    listOfUsers:allUsersIDs.length,
-    newUsersLength:newUsers.length,
-    newUsers:newUsers,
-    existingUsers:existingUsers.length,
-    usersIFound:users.length
-   });
-
-})
-
+    return res.status(200).json({
+      firebaseTotalUsers: allUserUIDs.length,
+      nonMongoIdUids: validTransformMap.length,
+      existingUsersInDB: usersFound.length,
+      newMappingsInserted: validTransformMap.length - usersFound.length
+    });
+  } catch (err) {
+    res.status(500).json({ error: err });
+  }
+});
 
 export default firebaseAllUsersRouter;
